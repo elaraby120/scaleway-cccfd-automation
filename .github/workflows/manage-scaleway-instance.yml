@@ -1,11 +1,11 @@
-name: Manage Scaleway MoxeApp Instance - Bureau Schedule
+name: Manage Scaleway MoxeApp Instance - Bureau 9h-21h
 
 on:
   schedule:
     # Démarrage à 9h Paris = 7h UTC, Lundi à Samedi
     - cron: '0 7 * * 1-6'
-    # Arrêt à 20h Paris = 18h UTC, Lundi à Samedi  
-    - cron: '0 18 * * 1-6'
+    # Arrêt à 21h Paris = 19h UTC, Lundi à Samedi  
+    - cron: '0 19 * * 1-6'
     # Arrêt le dimanche à 1h du matin (au cas où l'instance serait encore allumée)
     - cron: '0 23 * * 0'
   
@@ -47,10 +47,10 @@ jobs:
             # 9h Paris - démarrage (Lundi à Samedi)
             echo "action=start" >> $GITHUB_OUTPUT  
             echo "🌅 9h Paris - starting instance for work day"
-          elif [ "$CURRENT_HOUR" = "18" ]; then
-            # 20h Paris - arrêt (Lundi à Samedi)
+          elif [ "$CURRENT_HOUR" = "19" ]; then
+            # 21h Paris - arrêt (Lundi à Samedi)
             echo "action=stop" >> $GITHUB_OUTPUT
-            echo "🌅 20h Paris - stopping instance after work"
+            echo "🌆 21h Paris - stopping instance after work"
           else
             echo "action=status" >> $GITHUB_OUTPUT
             echo "ℹ️ Outside scheduled hours - checking status only"
@@ -110,6 +110,6 @@ jobs:
         ACTION="${{ steps.determine-action.outputs.action }}"
         if [ "$ACTION" != "status" ]; then
           echo "🎉 MoxeApp instance action completed: $ACTION"
-          echo "📋 Work schedule: Monday-Saturday 9h-20h Paris time"
+          echo "📋 Work schedule: Monday-Saturday 9h-21h Paris time"
           echo "🏖️ Sunday: Instance stopped (no work day)"
         fi
