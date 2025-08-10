@@ -1,0 +1,78 @@
+name: Manage Scaleway MoxeApp Instance
+
+on:
+  schedule:
+    # Arrêt à 21h Paris = 19h UTC
+    - cron: '0 19 * * *'
+    # Démarrage à 9h Paris = 7h UTC  
+    - cron: '0 7 * * *'
+  
+  # Permet de lancer manuellement le workflow
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action à effectuer'
+        required: true
+        default: 'status'
+        type: choice
+        options:
+        - status
+        - start
+        - stop
+
+jobs:
+  manage-instance:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Determine action
+      id: determine-action
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "action=${{ github.event.inputs.action }}" >> $GITHUB_OUTPUT
+        else
+          CURRENT_HOUR=$(date -u +%H)
+          if [ "$CURRENT_HOUR" = "19" ]; then
+            echo "action=stop" >> $GITHUB_OUTPUT
+          elif [ "$CURRENT_HOUR" = "07" ]; then
+            echo "action=start" >> $GITHUB_OUTPUT
+          else
+            echo "action=status" >> $GITHUB_OUTPUT
+          fi
+        fi
+
+    - name: Execute Scaleway API call
+      run: |
+        ACTION="${{ steps.determine-action.outputs.action }}"
+        
+        if [ "$ACTION" = "stop" ]; then
+          echo "🛑 Stopping MoxeApp instance..."
+          SCALEWAY_ACTION="poweroff"
+        elif [ "$ACTION" = "start" ]; then
+          echo "🚀 Starting MoxeApp instance..."
+          SCALEWAY_ACTION="poweron"
+        else
+          echo "ℹ️ Getting instance status..."
+          curl -s -H "X-Auth-Token: ${{ secrets.SCALEWAY_TOKEN }}" \
+            "https://api.scaleway.com/instance/v1/zones/fr-par-1/servers/${{ secrets.INSTANCE_ID }}" \
+            | jq -r '.server.state' || echo "Unable to get status"
+          exit 0
+        fi
+        
+        # Appel API Scaleway
+        RESPONSE=$(curl -s -w "%{http_code}" -o /tmp/response.json \
+          -X POST \
+          -H "X-Auth-Token: ${{ secrets.SCALEWAY_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          "https://api.scaleway.com/instance/v1/zones/fr-par-1/servers/${{ secrets.INSTANCE_ID }}/action" \
+          -d "{\"action\": \"$SCALEWAY_ACTION\"}")
+        
+        HTTP_CODE="${RESPONSE: -3}"
+        
+        if [ "$HTTP_CODE" = "202" ]; then
+          echo "✅ Action $ACTION executed successfully"
+        else
+          echo "❌ Error: HTTP $HTTP_CODE"
+          cat /tmp/response.json
+          exit 1
+        fi
