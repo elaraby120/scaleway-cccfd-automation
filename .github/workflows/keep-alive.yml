@@ -1,0 +1,20 @@
+name: Keep Alive - Prevent GitHub from disabling scheduled workflows
+
+on:
+  schedule:
+    # S'exécute le 1er de chaque mois à minuit UTC
+    - cron: '0 0 1 * *'
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keep workflow alive
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "chore: keep-alive to prevent scheduled workflows from being disabled"
+          git push
