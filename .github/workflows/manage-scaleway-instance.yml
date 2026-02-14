@@ -2,7 +2,7 @@ name: Manage Scaleway MoxeApp Instance - Bureau 9h-21h
 
 on:
   schedule:
-    # Démarrage à 9h Paris = 7h UTC, Lundi à Samedi
+    # Démarrage à 9h Paris = 7h UTC, Lundi à Samedi compris
     - cron: '0 7 * * 1-6'
     # Arrêt à 21h Paris = 19h UTC, Lundi à Samedi  
     - cron: '0 19 * * 1-6'
