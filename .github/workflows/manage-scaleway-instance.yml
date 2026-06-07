@@ -9,7 +9,7 @@ on:
     # Créneaux été/hiver pour viser 21h Paris, Lundi à Samedi.
     - cron: '17 19 * * 1-6'
     - cron: '17 20 * * 1-6'
-    # Arrêt le dimanche à 1h du matin (au cas où l'instance serait encore allumée)
+    # Arrêt de sécurité en fin de dimanche UTC, nuit dimanche/lundi à Paris.
     - cron: '17 23 * * 0'
   
   # Permet de lancer manuellement le workflow
