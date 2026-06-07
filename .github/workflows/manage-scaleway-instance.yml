@@ -2,12 +2,15 @@ name: Manage Scaleway MoxeApp Instance - Bureau 9h-21h
 
 on:
   schedule:
-    # Démarrage à 9h Paris = 7h UTC, Lundi à Samedi compris
-    - cron: '0 7 * * 1-6'
-    # Arrêt à 21h Paris = 19h UTC, Lundi à Samedi  
-    - cron: '0 19 * * 1-6'
+    # Créneaux été/hiver pour viser 9h Paris, Lundi à Samedi compris.
+    # Minute 17 pour éviter les retards fréquents des crons GitHub au début d'heure.
+    - cron: '17 7 * * 1-6'
+    - cron: '17 8 * * 1-6'
+    # Créneaux été/hiver pour viser 21h Paris, Lundi à Samedi.
+    - cron: '17 19 * * 1-6'
+    - cron: '17 20 * * 1-6'
     # Arrêt le dimanche à 1h du matin (au cas où l'instance serait encore allumée)
-    - cron: '0 23 * * 0'
+    - cron: '17 23 * * 0'
   
   # Permet de lancer manuellement le workflow
   workflow_dispatch:
@@ -34,67 +37,80 @@ jobs:
           echo "action=${{ github.event.inputs.action }}" >> $GITHUB_OUTPUT
           echo "📋 Manual execution: ${{ github.event.inputs.action }}"
         else
-          CURRENT_HOUR=$(date -u +%H)
-          CURRENT_DAY=$(date -u +%u)  # 1=Monday, 7=Sunday
-          
-          echo "🕐 Current time: ${CURRENT_HOUR}h UTC (day: $CURRENT_DAY)"
-          
-          if [ "$CURRENT_DAY" = "7" ]; then
-            # Dimanche - arrêt complet
-            echo "action=stop" >> $GITHUB_OUTPUT
-            echo "📅 Sunday detected - stopping instance for the weekend"
-          elif [ "$CURRENT_HOUR" = "07" ]; then
-            # 9h Paris - démarrage (Lundi à Samedi)
-            echo "action=start" >> $GITHUB_OUTPUT  
-            echo "🌅 9h Paris - starting instance for work day"
-          elif [ "$CURRENT_HOUR" = "19" ]; then
-            # 21h Paris - arrêt (Lundi à Samedi)
-            echo "action=stop" >> $GITHUB_OUTPUT
-            echo "🌆 21h Paris - stopping instance after work"
+          SCHEDULE="${{ github.event.schedule }}"
+          echo "🗓️ Scheduled trigger: $SCHEDULE"
+
+          PARIS_DAY=$(TZ=Europe/Paris date +%u)
+          PARIS_HOUR=$(TZ=Europe/Paris date +%H)
+          PARIS_DAY_NUM=$((10#$PARIS_DAY))
+          PARIS_HOUR_NUM=$((10#$PARIS_HOUR))
+
+          echo "🕐 Paris time: day=$PARIS_DAY_NUM hour=$PARIS_HOUR_NUM"
+
+          if [ "$PARIS_DAY_NUM" -ge 1 ] && [ "$PARIS_DAY_NUM" -le 6 ] && \
+             [ "$PARIS_HOUR_NUM" -ge 9 ] && [ "$PARIS_HOUR_NUM" -lt 21 ]; then
+            echo "action=start" >> $GITHUB_OUTPUT
+            echo "🌅 Business window detected - ensuring instance is running"
           else
-            echo "action=status" >> $GITHUB_OUTPUT
-            echo "ℹ️ Outside scheduled hours - checking status only"
+            echo "action=stop" >> $GITHUB_OUTPUT
+            echo "🌆 Outside business window - ensuring instance is stopped"
           fi
         fi
 
     - name: Execute Scaleway API call
       run: |
         ACTION="${{ steps.determine-action.outputs.action }}"
-        
+        API_URL="https://api.scaleway.com/instance/v1/zones/fr-par-1/servers/${{ secrets.INSTANCE_ID }}"
+
         echo "🎯 Executing action: $ACTION"
-        
-        if [ "$ACTION" = "stop" ]; then
-          echo "🛑 Stopping MoxeApp instance..."
-          SCALEWAY_ACTION="poweroff"
+
+        echo "ℹ️ Getting instance status..."
+        STATUS_HTTP_CODE=$(curl -sS -w "%{http_code}" -o /tmp/status.json \
+          -H "X-Auth-Token: ${{ secrets.SCALEWAY_TOKEN }}" \
+          "$API_URL")
+
+        if [ "$STATUS_HTTP_CODE" != "200" ] || ! jq -e '.server' /tmp/status.json > /dev/null 2>&1; then
+          echo "❌ Unable to get instance status"
+          echo "HTTP $STATUS_HTTP_CODE"
+          cat /tmp/status.json
+          exit 1
+        fi
+
+        CURRENT_STATUS=$(jq -r '.server.state' /tmp/status.json)
+        echo "📊 Instance current status: $CURRENT_STATUS"
+
+        if [ "$ACTION" = "status" ]; then
+          exit 0
         elif [ "$ACTION" = "start" ]; then
+          if [ "$CURRENT_STATUS" = "running" ] || [ "$CURRENT_STATUS" = "starting" ]; then
+            echo "✅ Instance already $CURRENT_STATUS - no start needed"
+            exit 0
+          fi
           echo "🚀 Starting MoxeApp instance..."
           SCALEWAY_ACTION="poweron"
-        else
-          echo "ℹ️ Getting instance status..."
-          STATUS_RESPONSE=$(curl -s -H "X-Auth-Token: ${{ secrets.SCALEWAY_TOKEN }}" \
-            "https://api.scaleway.com/instance/v1/zones/fr-par-1/servers/${{ secrets.INSTANCE_ID }}")
-          
-          if echo "$STATUS_RESPONSE" | jq -e '.server' > /dev/null 2>&1; then
-            CURRENT_STATUS=$(echo "$STATUS_RESPONSE" | jq -r '.server.state')
-            echo "📊 Instance current status: $CURRENT_STATUS"
-          else
-            echo "❌ Unable to get instance status"
-            echo "$STATUS_RESPONSE"
+        elif [ "$ACTION" = "stop" ]; then
+          if [ "$CURRENT_STATUS" = "stopped" ] || [ "$CURRENT_STATUS" = "stopping" ]; then
+            echo "✅ Instance already $CURRENT_STATUS - no stop needed"
+            exit 0
           fi
-          exit 0
+          echo "🛑 Stopping MoxeApp instance..."
+          SCALEWAY_ACTION="poweroff"
+        else
+          echo "❌ Unsupported action: $ACTION"
+          exit 1
         fi
-        
+
         # Appel API Scaleway pour start/stop
         echo "🔄 Calling Scaleway API..."
-        RESPONSE=$(curl -s -w "%{http_code}" -o /tmp/response.json \
+        RESPONSE=$(curl -sS -w "%{http_code}" -o /tmp/response.json \
           -X POST \
           -H "X-Auth-Token: ${{ secrets.SCALEWAY_TOKEN }}" \
           -H "Content-Type: application/json" \
-          "https://api.scaleway.com/instance/v1/zones/fr-par-1/servers/${{ secrets.INSTANCE_ID }}/action" \
+          "$API_URL/action" \
           -d "{\"action\": \"$SCALEWAY_ACTION\"}")
-        
+
         HTTP_CODE="${RESPONSE: -3}"
-        
+
         if [ "$HTTP_CODE" = "202" ]; then
           echo "✅ Action '$ACTION' executed successfully!"
           echo "📅 Next scheduled action will be automatic"
