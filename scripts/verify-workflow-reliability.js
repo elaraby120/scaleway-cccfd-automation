@@ -19,14 +19,8 @@ const checks = [
     pass: workflow.includes("${{ github.event.schedule }}"),
   },
   {
-    name: "summer and winter start crons are scheduled",
-    pass: workflow.includes("'17 7 * * 1-6'") && workflow.includes("'17 8 * * 1-6'"),
-  },
-  {
-    name: "summer and winter stop crons are scheduled",
-    pass:
-      workflow.includes("'17 19 * * 1-6'") &&
-      workflow.includes("'17 20 * * 1-6'"),
+    name: "weekday reconciliation runs every 15 minutes across useful UTC window",
+    pass: workflow.includes("'7,22,37,52 6-22 * * 1-6'"),
   },
   {
     name: "sunday safety stop cron is scheduled",

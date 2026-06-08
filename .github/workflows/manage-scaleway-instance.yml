@@ -2,13 +2,9 @@ name: Manage Scaleway MoxeApp Instance - Bureau 9h-21h
 
 on:
   schedule:
-    # Créneaux été/hiver pour viser 9h Paris, Lundi à Samedi compris.
-    # Minute 17 pour éviter les retards fréquents des crons GitHub au début d'heure.
-    - cron: '17 7 * * 1-6'
-    - cron: '17 8 * * 1-6'
-    # Créneaux été/hiver pour viser 21h Paris, Lundi à Samedi.
-    - cron: '17 19 * * 1-6'
-    - cron: '17 20 * * 1-6'
+    # Réconciliation toutes les 15 minutes sur la plage utile UTC.
+    # La décision réelle se fait en Europe/Paris pour gérer été/hiver et retards GitHub.
+    - cron: '7,22,37,52 6-22 * * 1-6'
     # Arrêt de sécurité en fin de dimanche UTC, nuit dimanche/lundi à Paris.
     - cron: '17 23 * * 0'
   
