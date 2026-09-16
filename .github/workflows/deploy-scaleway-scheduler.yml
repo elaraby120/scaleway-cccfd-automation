@@ -1,8 +1,6 @@
 name: Deploy Scaleway Serverless Scheduler
 
 on:
-  push:
-    branches: [codex/scaleway-serverless-scheduler]
   workflow_dispatch:
     inputs:
       operation:
@@ -31,5 +29,5 @@ jobs:
         env:
           SCALEWAY_TOKEN: ${{ secrets.SCALEWAY_TOKEN }}
           INSTANCE_ID: ${{ secrets.INSTANCE_ID }}
-          OPERATION: ${{ inputs.operation || 'stage' }}
+          OPERATION: ${{ inputs.operation }}
         run: python3 scripts/deploy_scheduler.py "$OPERATION"

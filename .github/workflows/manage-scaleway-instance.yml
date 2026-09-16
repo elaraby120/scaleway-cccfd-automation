@@ -1,13 +1,6 @@
-name: Manage Scaleway MoxeApp Instance - Bureau 9h-21h
+name: Manage Scaleway MoxeApp Instance - Manual fallback
 
 on:
-  schedule:
-    # Réconciliation toutes les 15 minutes sur la plage utile UTC.
-    # La décision réelle se fait en Europe/Paris pour gérer été/hiver et retards GitHub.
-    - cron: '7,22,37,52 6-22 * * 1-6'
-    # Arrêt de sécurité en fin de dimanche UTC, nuit dimanche/lundi à Paris.
-    - cron: '17 23 * * 0'
-  
   # Permet de lancer manuellement le workflow
   workflow_dispatch:
     inputs:
@@ -26,36 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Determine action based on schedule
-      id: determine-action
-      run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          echo "action=${{ github.event.inputs.action }}" >> $GITHUB_OUTPUT
-          echo "📋 Manual execution: ${{ github.event.inputs.action }}"
-        else
-          SCHEDULE="${{ github.event.schedule }}"
-          echo "🗓️ Scheduled trigger: $SCHEDULE"
-
-          PARIS_DAY=$(TZ=Europe/Paris date +%u)
-          PARIS_HOUR=$(TZ=Europe/Paris date +%H)
-          PARIS_DAY_NUM=$((10#$PARIS_DAY))
-          PARIS_HOUR_NUM=$((10#$PARIS_HOUR))
-
-          echo "🕐 Paris time: day=$PARIS_DAY_NUM hour=$PARIS_HOUR_NUM"
-
-          if [ "$PARIS_DAY_NUM" -ge 1 ] && [ "$PARIS_DAY_NUM" -le 6 ] && \
-             [ "$PARIS_HOUR_NUM" -ge 9 ] && [ "$PARIS_HOUR_NUM" -lt 21 ]; then
-            echo "action=start" >> $GITHUB_OUTPUT
-            echo "🌅 Business window detected - ensuring instance is running"
-          else
-            echo "action=stop" >> $GITHUB_OUTPUT
-            echo "🌆 Outside business window - ensuring instance is stopped"
-          fi
-        fi
-
     - name: Execute Scaleway API call
       run: |
-        ACTION="${{ steps.determine-action.outputs.action }}"
+        ACTION="${{ inputs.action }}"
         API_URL="https://api.scaleway.com/instance/v1/zones/fr-par-1/servers/${{ secrets.INSTANCE_ID }}"
 
         echo "🎯 Executing action: $ACTION"
@@ -108,8 +74,8 @@ jobs:
         HTTP_CODE="${RESPONSE: -3}"
 
         if [ "$HTTP_CODE" = "202" ]; then
-          echo "✅ Action '$ACTION' executed successfully!"
-          echo "📅 Next scheduled action will be automatic"
+          echo "✅ Request '$ACTION' accepted by Scaleway."
+          echo "Run status to confirm the final state; the Scaleway scheduler remains active."
         else
           echo "❌ Error: HTTP $HTTP_CODE"
           echo "Response:"
@@ -119,9 +85,9 @@ jobs:
 
     - name: Summary
       run: |
-        ACTION="${{ steps.determine-action.outputs.action }}"
+        ACTION="${{ inputs.action }}"
         if [ "$ACTION" != "status" ]; then
-          echo "🎉 MoxeApp instance action completed: $ACTION"
-          echo "📋 Work schedule: Monday-Saturday 9h-21h Paris time"
+          echo "📋 Manual instance action requested: $ACTION"
+          echo "📋 Native Scaleway schedule: Monday-Saturday 08:50-21:00 Europe/Paris"
           echo "🏖️ Sunday: Instance stopped (no work day)"
         fi
