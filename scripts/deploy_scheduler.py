@@ -73,7 +73,8 @@ class Deployment:
         print(json.dumps({'instance_name': server['name'], 'state': server['state'],
                           'project_id': self.project, 'job_id': self.job['id'] if self.job else None}), flush=True)
 
-    def secret_version(self, suffix, content, version_description):
+    def secret_version(self, suffix, content):
+        version_description = hashlib.sha256(content).hexdigest()
         name = self.config['name'] + '-' + suffix
         secrets = self.listing(self.secrets + '/secrets', 'secrets', project_id=self.project, name=name)
         matches = [s for s in secrets if s['name'] == name]
@@ -99,8 +100,8 @@ class Deployment:
         if self.job and self.triggers():
             raise RuntimeError('Scheduler is already active; deactivate before staging an update')
         code = (ROOT / 'scheduler/controller.py').read_bytes()
-        script_id, script_version = self.secret_version('controller', code, hashlib.sha256(code).hexdigest())
-        token_id, token_version = self.secret_version('api-token', self.token.encode(), 'existing-github-scaleway-token')
+        script_id, script_version = self.secret_version('controller', code)
+        token_id, token_version = self.secret_version('api-token', self.token.encode())
         payload = job_payload(self.config, self.project, self.instance_id)
         if self.job:
             payload.pop('project_id')

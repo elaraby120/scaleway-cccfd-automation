@@ -10,17 +10,11 @@ MODULE = Path(__file__).parents[1] / 'scheduler' / 'controller.py'
 class ControllerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if MODULE.exists():
-            spec = importlib.util.spec_from_file_location('controller', MODULE)
-            cls.c = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(cls.c)
-
-    def test_controller_is_available(self):
-        self.assertTrue(MODULE.exists(), 'The independent Scaleway controller is missing')
+        spec = importlib.util.spec_from_file_location('controller', MODULE)
+        cls.c = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.c)
 
     def controller(self):
-        if not MODULE.exists():
-            self.skipTest('Controller not implemented yet')
         return self.c
 
     def test_paris_boundaries_saturday_sunday_and_daylight_saving(self):
