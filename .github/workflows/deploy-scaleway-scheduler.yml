@@ -1,0 +1,35 @@
+name: Deploy Scaleway Serverless Scheduler
+
+on:
+  push:
+    branches: [codex/scaleway-serverless-scheduler]
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Deployment operation (stage never changes instance power)'
+        required: true
+        default: status
+        type: choice
+        options: [inspect, stage, activate, status, deactivate]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scaleway-scheduler-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test scheduler
+        run: python3 -m unittest discover -s tests -v
+      - name: Deploy and verify
+        env:
+          SCALEWAY_TOKEN: ${{ secrets.SCALEWAY_TOKEN }}
+          INSTANCE_ID: ${{ secrets.INSTANCE_ID }}
+          OPERATION: ${{ inputs.operation || 'stage' }}
+        run: python3 scripts/deploy_scheduler.py "$OPERATION"
