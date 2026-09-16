@@ -1,0 +1,17 @@
+{
+  "name": "moxe-instance-scheduler",
+  "region": "fr-par",
+  "zone": "fr-par-1",
+  "expected_instance_name": "Moxe-APP-N8N",
+  "image_uri": "docker.io/library/python@sha256:9c47360a2a0355e2da18516d0b1c2126ec22c195d2185e97347c9d98398c5bef",
+  "cpu_limit": 560,
+  "memory_limit": 1024,
+  "local_storage_capacity": 1024,
+  "job_timeout": "240s",
+  "health_urls": ["https://app.moxe.ma/login", "https://flow.moxe.ma/healthz"],
+  "triggers": [
+    {"name": "business-reconciliation", "schedule": "*/5 8-21 * * 1-6", "timezone": "Europe/Paris"},
+    {"name": "night-safety-stop", "schedule": "0 0 * * *", "timezone": "Europe/Paris"},
+    {"name": "sunday-safety-stop", "schedule": "0 9,21 * * 0", "timezone": "Europe/Paris"}
+  ]
+}
