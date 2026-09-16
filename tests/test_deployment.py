@@ -25,6 +25,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(payload['startup_command'], ['python3', '/controller.py'])
         self.assertEqual(payload['cpu_limit'], 560)
         self.assertEqual(payload['memory_limit'], 1024)
+        self.assertGreater(payload.get('local_storage_capacity', 0), 0)
 
 
 if __name__ == '__main__':

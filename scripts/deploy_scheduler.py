@@ -18,6 +18,7 @@ def job_payload(config, project_id, instance_id):
     return {
         'name': config['name'], 'project_id': project_id,
         'cpu_limit': config['cpu_limit'], 'memory_limit': config['memory_limit'],
+        'local_storage_capacity': config['local_storage_capacity'],
         'image_uri': config['image_uri'], 'job_timeout': config['job_timeout'],
         'startup_command': ['python3', '/controller.py'], 'args': [],
         'description': 'Moxe Mon-Sat 08:50-21:00 Europe/Paris; application health checks',
