@@ -8,7 +8,12 @@ on:
         required: true
         default: status
         type: choice
-        options: [inspect, stage, activate, status, deactivate]
+        options: [inspect, stage, activate, status, deactivate, configure-alerts]
+      send_test_alert:
+        description: 'Send a test after configuring the sole alert contact'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -30,4 +35,6 @@ jobs:
           SCALEWAY_TOKEN: ${{ secrets.SCALEWAY_TOKEN }}
           INSTANCE_ID: ${{ secrets.INSTANCE_ID }}
           OPERATION: ${{ inputs.operation }}
+          ALERT_EMAIL: ${{ secrets.SCALEWAY_ALERT_EMAIL }}
+          SEND_ALERT_TEST: ${{ inputs.send_test_alert }}
         run: python3 scripts/deploy_scheduler.py "$OPERATION"

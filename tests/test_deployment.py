@@ -2,6 +2,7 @@ import importlib.util
 import base64
 import json
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
@@ -55,6 +56,58 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(second, first)
         self.assertEqual(len(created_payloads), 1)
         self.assertEqual(base64.b64decode(created_payloads[0]['data']), b'new-token')
+
+    def alert_deployment(self, contacts=None, enabled=True):
+        deployment = self.module.Deployment.__new__(self.module.Deployment)
+        deployment.config = {'region': 'fr-par'}
+        deployment.project = 'project-example'
+        contacts = list(contacts or [])
+        mutations = []
+
+        def api(method, path, payload=None):
+            if method == 'GET' and '/alert-manager?' in path:
+                return {'alert_manager_enabled': True}
+            if method == 'GET' and '/alerts?' in path:
+                return {'alerts': [{'name': 'JobRunFailed', 'rule_status': 'enabled' if enabled else 'disabled'}]}
+            mutations.append((method, path, payload))
+            if path.endswith('/contact-points'):
+                contacts.append({'email': payload['email'], 'send_resolved_notifications': True})
+            return {}
+
+        deployment.api = api
+        deployment.listing = lambda *args, **kwargs: contacts
+        return deployment, mutations, contacts
+
+    def test_alert_contact_creation_is_verified_and_repeat_is_idempotent(self):
+        deployment, mutations, contacts = self.alert_deployment()
+        with patch.dict('os.environ', {'ALERT_EMAIL': 'owner@example.com', 'SEND_ALERT_TEST': 'false'}):
+            deployment.configure_alerts()
+            deployment.configure_alerts()
+        self.assertEqual(len(mutations), 1)
+        self.assertEqual(mutations[0][0], 'POST')
+        self.assertEqual(contacts, [{'email': {'to': 'owner@example.com'}, 'send_resolved_notifications': True}])
+
+    def test_alert_test_cannot_notify_unrequested_contacts(self):
+        deployment, mutations, _ = self.alert_deployment([
+            {'email': {'to': 'someone@example.com'}, 'send_resolved_notifications': True}])
+        with patch.dict('os.environ', {'ALERT_EMAIL': 'owner@example.com', 'SEND_ALERT_TEST': 'true'}):
+            with self.assertRaisesRegex(RuntimeError, 'other recipients'):
+                deployment.configure_alerts()
+        self.assertFalse(any(path.endswith('/trigger-test-alert') for _, path, _ in mutations))
+
+    def test_disabled_alert_is_not_activated_by_contact_configuration(self):
+        deployment, mutations, _ = self.alert_deployment(enabled=False)
+        with patch.dict('os.environ', {'ALERT_EMAIL': 'owner@example.com'}):
+            with self.assertRaisesRegex(RuntimeError, 'already be enabled'):
+                deployment.configure_alerts()
+        self.assertEqual(mutations, [])
+
+    def test_test_alert_is_requested_for_the_configured_recipient(self):
+        deployment, mutations, _ = self.alert_deployment()
+        with patch.dict('os.environ', {'ALERT_EMAIL': 'owner@example.com', 'SEND_ALERT_TEST': 'true'}):
+            deployment.configure_alerts()
+        self.assertTrue(mutations[-1][1].endswith('/trigger-test-alert'))
+        self.assertEqual(mutations[-1][2], {'project_id': 'project-example'})
 
 
 if __name__ == '__main__':

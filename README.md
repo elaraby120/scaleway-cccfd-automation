@@ -75,9 +75,17 @@ puis `activate` après intervention.
 
 Le job retourne un échec en cas d'erreur API, de transition qui n'aboutit pas, ou
 d'application indisponible. Dans Cockpit → Alerts, la règle Serverless Jobs
-**Job Run failed** est activée depuis le 16 septembre 2026. **Le destinataire
-e-mail reste à renseigner** avec l'adresse choisie par le propriétaire.
-Les notifications nécessitent un contact confirmé dans le gestionnaire d'alertes.
+**Job Run failed** est activée depuis le 16 septembre 2026.
+Le destinataire se configure via le secret GitHub `SCALEWAY_ALERT_EMAIL`, puis
+l'opération manuelle `configure-alerts` du workflow de déploiement. L'adresse
+reste hors du dépôt public et des journaux. Cette opération ajoute le contact
+sans supprimer les autres, active les notifications de résolution, puis vérifie
+le contact enregistré par Scaleway. Elle ne modifie ni la machine ni son calendrier.
+
+L'option `send_test_alert` demande une alerte de test. Comme Scaleway envoie ce test
+à tous les contacts, le script ne le déclenche que si l'adresse configurée est
+l'unique destinataire. Une réponse API positive confirme la demande d'envoi,
+pas la réception dans la boîte e-mail.
 Cette règle détecte les exécutions en échec ; elle ne détecte pas l'absence totale
 de déclenchement du service de planification.
 
@@ -115,7 +123,9 @@ python3 -m unittest discover -s tests -v
 
 Les tests couvrent les horaires été/hiver, le dimanche, les transitions, la
 confirmation après démarrage, les échecs de santé, le mode lecture seule, l'absence
-de secrets dans les variables ordinaires, et la rotation des versions de clé API.
+de secrets dans les variables ordinaires, la rotation des versions de clé API,
+la configuration sans doublon du contact et la restriction des tests d'alerte
+au destinataire prévu.
 La validation finale exige en plus une exécution réelle, puis une exécution
 programmée réussie dans Scaleway.
 
@@ -134,4 +144,13 @@ programmée réussie dans Scaleway.
   du fournisseur et les erreurs doivent être surveillées.
 - La machine était déjà démarrée pendant la bascule. Le cycle réel arrêt du soir /
   démarrage du lendemain n'a pas été forcé pendant les heures de travail.
-- La règle d'alerte est active ; les notifications restent en attente du destinataire.
+- À la bascule du 16 septembre, la règle d'alerte était active et son destinataire
+  restait à renseigner.
+
+### Notifications du 17 septembre 2026
+
+Le contact choisi par le propriétaire est enregistré, avec notifications en cas
+d'échec et de résolution. La règle `JobRunFailed` est activée. Le
+[contrôle réel](https://github.com/elaraby120/scaleway-cccfd-automation/actions/runs/35236095208)
+a vérifié le contact et demandé une alerte de test à cet unique destinataire.
+La réception dans la boîte e-mail reste à constater côté destinataire.
