@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 from urllib.error import HTTPError
@@ -46,6 +47,8 @@ class Deployment:
                 return json.loads(raw) if raw else {}
         except HTTPError as exc:
             detail = exc.read().decode(errors='replace').replace(self.token, '[redacted]')
+            if os.environ.get('ALERT_EMAIL'):
+                detail = detail.replace(os.environ['ALERT_EMAIL'], '[redacted]')
             raise RuntimeError(f'{method} {path}: HTTP {exc.code}: {detail[:800]}') from None
 
     def listing(self, path, key, **filters):
@@ -175,15 +178,48 @@ class Deployment:
                           'recent_runs': [{k: r.get(k) for k in ('id', 'created_at', 'state', 'exit_code', 'run_duration')}
                                           for r in sorted(runs, key=lambda r: r['created_at'], reverse=True)[:8]]}), flush=True)
 
+    def configure_alerts(self):
+        email = os.environ.get('ALERT_EMAIL', '').strip()
+        if not re.fullmatch(r'[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+', email):
+            raise ValueError('ALERT_EMAIL must contain one email address')
+        cockpit = '/cockpit/v1/regions/' + self.config['region']
+        query = '?' + urlencode({'project_id': self.project})
+        manager = self.api('GET', cockpit + '/alert-manager' + query)
+        alerts = self.api('GET', cockpit + '/alerts' + query)['alerts']
+        if not manager['alert_manager_enabled'] or not any(
+                a['name'] == 'JobRunFailed' and a['rule_status'] == 'enabled' for a in alerts):
+            raise RuntimeError('The JobRunFailed alert must already be enabled')
+        path = cockpit + '/alert-manager/contact-points'
+        contacts = self.listing(path, 'contact_points', project_id=self.project)
+        matching = next((c for c in contacts if c.get('email', {}).get('to') == email), None)
+        payload = {'project_id': self.project, 'email': {'to': email},
+                   'send_resolved_notifications': True}
+        if matching is None:
+            self.api('POST', path, payload)
+        elif not matching['send_resolved_notifications']:
+            self.api('PATCH', path, payload)
+        contacts = self.listing(path, 'contact_points', project_id=self.project)
+        verified = next((c for c in contacts if c.get('email', {}).get('to') == email), None)
+        if not verified or not verified['send_resolved_notifications']:
+            raise RuntimeError('Alert contact verification failed')
+        send_test = os.environ.get('SEND_ALERT_TEST') == 'true'
+        if send_test:
+            # The test endpoint notifies all contacts, so never include other recipients.
+            if len(contacts) != 1:
+                raise RuntimeError('Contact configured; test skipped because other recipients exist')
+            self.api('POST', cockpit + '/alert-manager/trigger-test-alert', {'project_id': self.project})
+        print(json.dumps({'event': 'alert_contact_verified', 'rule_enabled': True,
+                          'resolved_notifications': True, 'test_alert_requested': send_test}), flush=True)
+
 
 def main():
     operation = sys.argv[1] if len(sys.argv) > 1 else 'inspect'
-    if operation not in ('inspect', 'stage', 'activate', 'deactivate', 'status'):
+    if operation not in ('inspect', 'stage', 'activate', 'deactivate', 'status', 'configure-alerts'):
         raise ValueError('Unknown deployment operation')
     deployment = Deployment()
     deployment.inspect()
     if operation != 'inspect':
-        getattr(deployment, operation)()
+        getattr(deployment, operation.replace('-', '_'))()
     if deployment.job:
         result = {'job_id': deployment.job['id'], 'project_id': deployment.project,
                   'region': deployment.config['region']}
